@@ -12,7 +12,7 @@ Location APIs** — in plain English.
 | **Upstream** | Volvo Cars Developer Portal: Connected Vehicle API v2 · Energy API v2 · Location API v1 |
 | **Transport** | Streamable HTTP MCP endpoint, OAuth 2.1 + dynamic client registration (RFC 7591) — identical to mytesla.io |
 | **Tool count** | **19 fixed tools** — no drive tool, and (by Volvo API design) **no charging control** |
-| **Credential model** | **Managed by default** — users just log in with their Volvo ID (sharded across an Embay-published app pool). **BYOK Premium**: self-service upgrade where the user brings their own Volvo API application (private 10k/day quota — "your key, your quota, your kill switch"). Zero operator manual effort in either tier |
+| **Credential model** | **Managed by default** — users just log in with their Volvo ID (sharded across an Embay-published app pool). **Own-key (BYOK) option** on any tier: self-service wizard where the user brings their own Volvo API application (private 10k/day quota — "your key, your quota, your kill switch"), always priced below the managed equivalent. Paid tiers sell *features*, not escape from degradation (§8.1). Zero operator manual effort throughout |
 | **Markets at launch** | EMEA + US/Canada — a subset of Volvo's production regions (LatAm deferred to Phase 2; **no APAC exists upstream**) |
 | **Research basis** | Deep-dive of developer.volvocars.com content, triangulated 2026-07-29 (portal not directly fetchable — see Appendix E): Volvo's own OpenAPI spec, Volvo's official sample repo, and production clients (official Home Assistant `volvo` integration, evcc, homebridge-volvoEX30, volvo2mqtt). Confidence labels carried through; unverified items are marked and collected in §15. |
 
@@ -40,8 +40,8 @@ on Volvo's official developer APIs, with nominative "works with Volvo cars" posi
 Two structural constraints shape everything below and are treated as design inputs, not surprises:
 
 1. **Quota:** every Volvo API application gets ~10,000 requests/day. → the default tier shards
-   users across a pool of Embay-published apps (§8), and the **BYOK Premium** tier (§6.1) moves a
-   user onto their own private quota — each upgrade also frees pool capacity.
+   users across a pool of Embay-published apps (§8), and the **own-key (BYOK) option** (§6.1)
+   moves a user onto their own private quota — each switch also frees pool capacity.
 2. **Re-auth:** self-published Volvo apps have a ~7-day refresh-token grant. → keepalive refresh
    job + graceful re-auth UX (§6.3), partner track to remove it (§12).
 
@@ -259,24 +259,25 @@ so this product adds a **web dashboard** at the product domain. The model:
 - **Flow ordering (first connect, default/managed tier):** MCP client connect → server-hosted
   authorization page (signup/login) → **Volvo ID consent** on the pool app the account is
   assigned to (§8) → redirect back to the MCP client with the grant. **No developer-portal
-  contact, no keys — ~2 minutes.** Premium upgraders go through the §6.1 BYOK wizard from the
-  dashboard instead, ending in a fresh Volvo ID consent bound to their own app.
-- **Dashboard (logged-in, reachable any time):** **"Upgrade to Premium (BYOK)"** wizard, BYOK
-  credential entry/rotation, **"re-test my connection"** diagnostic (§6.5), re-auth button,
+  contact, no keys — ~2 minutes.** Own-key users (any tier) go through the §6.1 BYOK wizard from
+  the dashboard instead, ending in a fresh Volvo ID consent bound to their own app.
+- **Dashboard (logged-in, reachable any time):** plan management, **"Advanced: private capacity
+  (your own Volvo key)"** wizard, BYOK credential entry/rotation, **"re-test my connection"** diagnostic (§6.5), re-auth button,
   connected-cars list, credits/billing (Phase 2), data-deletion self-service. The §6.3 "one-line
   re-auth URL" returned in tool results is a deep link into this dashboard.
 
-### 6.1 BYOK Premium — self-service upgrade wizard
+### 6.1 Own-key (BYOK) option — self-service wizard
 
-**Positioning: the premium perk.** *"Your key, your quota, your kill switch."* A Premium user
-creates their own Volvo API application, so they get a private ~10,000 requests/day quota (with
-the higher in-product budgets that unlocks), their car's traffic is never pooled with other
-users, and deleting their app in Volvo's portal instantly severs everything. One-time,
-~10–15 minutes, proven at scale by the Home Assistant / evcc / homebridge communities.
-**Fully self-service — zero operator involvement**: the wizard validates every input
-automatically and §6.5 diagnostics handle post-setup issues. Launched from the dashboard's
-"Upgrade to Premium" flow (payment first, Phase 2+; free during beta). Guided wizard with
-screenshots, copy buttons, and per-field live validation:
+**Positioning: private capacity + control, attachable to any tier (including Free) and always
+priced below the managed equivalent** — the user supplies the capacity (§8.1). *"Your key, your
+quota, your kill switch."* The user creates their own Volvo API application, so they get a
+private ~10,000 requests/day quota (effectively always-fresh reads), their car's traffic is
+never pooled with other users, and deleting their app in Volvo's portal instantly severs
+everything. One-time, ~10–15 minutes, proven at scale by the Home Assistant / evcc / homebridge
+communities. **Fully self-service — zero operator involvement**: the wizard validates every
+input automatically and §6.5 diagnostics handle post-setup issues. Entry points per §8.1
+(Settings always; one contextual card at first felt degradation; never at checkout). Guided
+wizard with screenshots, copy buttons, and per-field live validation:
 
 1. **Create a developer account** at `developer.volvocars.com` — *sign in with the same Volvo ID
    you already use in the Volvo Cars app* (no new identity).
@@ -454,10 +455,10 @@ Assistant's ~12-calls-per-poll-cycle continuous polling). A realistic active use
 
 - **Default (managed) tier:** users share the Embay app pool's quota — capacity math below
   drives pool sizing. Multi-vehicle households and heavy users are natural Premium upsells.
-- **BYOK Premium tier:** the user's usage is ≈ 0.5–2% of *their own* private quota — effectively
-  unlimited headroom, which funds the tier's perks (higher budgets, "always-fresh" reads,
-  multi-vehicle priority). **Each upgrade also releases a pool slot** — Premium is simultaneously
-  revenue and capacity relief.
+- **Own-key (BYOK) users, any tier:** their usage is ≈ 0.5–2% of *their own* private quota —
+  effectively unlimited headroom (always-fresh reads for free-tier own-key users; high-frequency
+  proactive polling on paid own-key plans). **Each switch also releases a pool slot** — the
+  option is capacity relief even when it earns nothing.
 - The caching/coalescing stack (§5.2) still ships — it's what makes reads feel instant, keeps
   headroom for chatty assistant sessions, and protects pathological clients.
 - Per-user daily budget (default ~1,000 upstream calls — 10% of their quota) with serve-stale
@@ -488,9 +489,77 @@ Assistant's ~12-calls-per-poll-cycle continuous polling). A realistic active use
     a per-app quota is classic "misuse"-clause territory, and suspension would hit every app on
     the account at once. Use only transparently and modestly, with the official business-case
     quota-raise request submitted in parallel.
-  - BYOK Premium is the pressure valve and the resilience floor: heavy users self-select out of
-    the pool, and if the pool is ever suspended, users migrate to their own apps via the §6.1
-    emergency path.
+  - The own-key option is the pressure valve and the resilience floor: heavy users self-select
+    out of the pool, and if the pool is ever suspended, users migrate to their own apps via the
+    §6.1 emergency path.
+
+### 8.1 Tier positioning & upgrade journey (focus-group validated)
+
+Output of a five-persona simulated focus group (non-technical family owner · HA-running DIY
+engineer · multi-car executive/mytesla customer · privacy-focused owner · mytesla-parity
+customer) synthesized by a pricing pass. **Core principles (unanimous or near-unanimous):**
+
+1. **BYOK is never *required* for any tier** — requiring it excludes the two highest-WTP
+   personas. It's an architecture option on any tier.
+2. **A fully managed paid tier is the flagship** — "you make the capacity problem go away" *is*
+   the product for non-technical/premium buyers.
+3. **Own-key plans are always priced below their managed equivalent** — the user supplies the
+   capacity; violating this reads as rent-seeking to the evangelist segment.
+4. **Paid tiers sell features with real marginal cost** (scheduled actions, proactive alerts,
+   household/multi-car, audit) — **never escape from degradation**. Nobody pays to fix what
+   pooling broke; free + own key fixes freshness for $0.
+
+**Proposed ladder** (⚠️ GATE = contingent on the Phase-0 Volvo commercial-terms answer; own-key
+and Free tiers are not gated):
+
+| Tier | Price | Capacity | Includes |
+|---|---|---|---|
+| **Free** | $0 | Shared pool (target ≤35 users/app) | All commands always instant; security-state reads (locks/doors) always live; ~30 live data refreshes/day, unlimited cached answers with freshness labels; 1 car |
+| **Free + own key** | $0 | User's private 10k/day | Same features, always-fresh reads |
+| **Plus (managed)** ⚠️ | ~$5/mo · $50/yr | Low-ratio pool (≤10 users/app) | "Always fresh, always on"; scheduled actions (preheat 7:45 school days); proactive alerts (charging done, unlocked at night); fetch-audit log; concierge re-auth |
+| **Plus + own key** | ~$3/mo | User's private 10k/day | Everything in Plus with high-frequency polling on own headroom + full privacy story (per-key audit, EU processing docs) |
+| **Household (managed)** ⚠️ | ~$14/mo | Low-ratio pools per car | Plus for up to 4 vehicles incl. Tesla via mytesla bundle; sub-users; one wallet |
+
+Billing: **flat subscription** (personas reject credit metering); mytesla credits accepted as a
+**payment rail** for the same plans. If the ⚠️ GATE answer is negative: reprice managed tiers on
+Volvo commercial terms, or premium becomes **concierge BYOK** (white-glove assisted wizard).
+
+**Free-tier limits UX** — metered unit is "**live checks**" (fresh fetches), never API-speak:
+cached answers unlimited with a quiet "as of N min ago" badge; degradation ladder = live →
+cache-first with one-tap *"check right now?"* → cached-only except security reads (reserved
+budget) → the rare pool-exhaustion state, messaged once, honestly, in local time: *"Volvo limits
+how often free apps can check in with the car each day, and today's shared allowance is used up.
+I'll show saved info until it resets at midnight. Locking, unlocking, and preheat still work
+instantly."* Never: a blocked command, the words "quota"/"API"/"midnight UTC". Honesty holds
+only if exhaustion is genuinely rare — internal SLO: <0.5% of free user-days see it, enforced by
+pool auto-sharding *before* launch.
+
+**Command-priority guarantee (explicit, in writing, all tiers):** ~15–20% of every app's daily
+calls hard-reserved for commands + security reads; commands never metered, never queued behind
+polling, never cached. Public promise: *"Lock, unlock, climate, and every other command work
+instantly on every plan — free or paid — always."* A command failing on pooled quota is a
+same-day churn event; the promise is what makes the free-tier limit message survivable.
+
+**Upgrade journey — four trigger moments, each shown once, dismissals stick:** (1) first felt
+staleness on a departure-critical read (upgrade card, own-key line in small print below);
+(2) an allowance-exhaustion event (+ "Plus never hits this limit"); (3) habit milestone (~day 14
+/ ~100 questions, framed as celebration); (4) second car or mytesla account detected ("your
+credits work here too"). **Never:** interstitials, upsell after a successful query, re-showing
+dismissed cards, BYOK at checkout, degrading the free tier to force upgrades.
+
+**Where the own-key option appears:** always in Settings ("Advanced: private capacity");
+once contextually at first felt degradation (below the managed option for mainstream users);
+optionally one calm sentence at signup — **A/B test this** (the one genuine persona
+disagreement). Don't market own-key as "set and forget" — the 7-day Volvo re-login applies to
+both architectures.
+
+**Pre-lock measurements (beta):** signup BYOK one-liner vs none; Plus $4 vs $6 (Household
+$12 vs $18); Volvo-attributed vs neutral degradation copy (7-day retention after first
+limit-hit); 20 vs 40 live-refresh allowance + real per-user call distribution (validates pool
+ratios before charging); first-staleness card vs day-14 milestone trigger; mytesla-wallet vs
+separate-billing cohorts. **Operational gates before paid launch:** pool exhaustion <0.5% of
+free user-days; command p99 within target during constrained states; re-auth completion >95%
+with pre-expiry nudge; own-key wizard median ≤12 min with per-step drop-off tracked.
 - Build-time verification: whether token-endpoint calls (volvoid host, no `vcc-api-key`) count
   against the API quota — assumed not, verify in week 1.
 - Ops alerting at 70/85/95% of any user's daily budget, plus fleet-wide anomaly alerts.
@@ -556,10 +625,10 @@ user data; prompts stay in the user's AI client — we receive only tool calls. 
   both T&C pages in a browser; email `developer.portal@volvocars.com` asking whether a paid
   third-party consumer product may operate against user-owned API applications (BYOK) and/or as
   a published app. The managed default tier runs on Embay-published apps, so this answer gates
-  charging money on it; the **BYOK Premium tier is the structural hedge** — each Premium owner
-  accesses their own car under their own T&C acceptance while we charge for software, and the
-  §6.1 migration machinery can move the whole user base there if needed. Written clarity is
-  still the goal. *(Not legal advice; have counsel skim the final T&C.)*
+  charging money on the managed paid tiers (⚠️ GATE rows in §8.1); the **own-key (BYOK) option
+  is the structural hedge** — an own-key owner accesses their own car under their own T&C
+  acceptance while we charge for software, and the §6.1 migration machinery can move the whole
+  user base there if needed. Written clarity is still the goal. *(Not legal advice; have counsel skim the final T&C.)*
 - **Disclaimer copy** (every page + README, mirroring mytesla): "Not affiliated with, endorsed
   by, or sponsored by Volvo Cars or AB Volvo. Built on Volvo Cars' official developer APIs.
   References to Volvo identify compatibility only."
@@ -580,9 +649,10 @@ test-token smoke tests of every endpoint in Appendix B.
   tools deferred until real-car beta validation of nuisance/battery behavior;
   `start_engine`/`stop_engine` pending access to a legacy VOC test car.)
 - **Managed default onboarding** (Volvo ID login only, §6.0) on a starter pool of 2–3 published
-  apps (~100–150 DAU capacity, expandable instantly), **plus the BYOK Premium upgrade wizard
-  live from day one** (free during beta — it's the capacity relief valve and exercises the §6.1
-  machinery early). Both tiers fully self-service.
+  apps (~100–150 DAU capacity at launch ratios, expandable instantly), **plus the own-key (BYOK)
+  wizard live from day one on every tier** (it's the capacity relief valve and exercises the
+  §6.1 machinery early). Everything free during beta; §8.1 pre-lock measurements run here. All
+  fully self-service.
 - Markets: EMEA + US/Canada. Cars: verified set as **supported** (EX30, EX40/XC40 BEV, EC40/C40;
   Google-Built-In PHEVs per Appendix D: XC60/S90/V90 MY2022+, XC90/S60/V60 MY2023+), earlier
   PHEVs and VOC MY2010–2024 **best-effort**, **EX90/ES90 "beta — limited
@@ -592,18 +662,16 @@ test-token smoke tests of every endpoint in Appendix B.
   server card, grant-lifetime telemetry.
 
 **Phase 2 — v1:**
-Remaining 4 tools (honk×2 with cooldowns, engine×2 capability-gated); **monetization**: free/paid
-default tier with credits mirroring mytesla.io **+ BYOK Premium priced as the top tier**
-("your key, your quota" perks: private quota, higher budgets, always-fresh reads, multi-vehicle
-priority) — gated on the Phase-0 commercial answer for the default tier; Latin America; the
-public spec repo (sibling of this one: README/TOOLS/SECURITY/ARCHITECTURE/PRIVACY, same
-audit-first positioning).
+Remaining 4 tools (honk×2 with cooldowns, engine×2 capability-gated); **monetization per the
+§8.1 ladder** (flat subscriptions; mytesla credits as a payment rail; managed paid tiers gated
+on the Phase-0 commercial answer, own-key plans not gated); Latin America; the public spec repo
+(sibling of this one: README/TOOLS/SECURITY/ARCHITECTURE/PRIVACY, same audit-first positioning).
 
 **Phase 3 — scale:**
 Grow the default-tier pool ahead of demand (§8 sizing/alerting); re-auth-cycle rebalancing;
 API-key spillover only if the Phase-0 key↔token binding test verifies it and counsel is
 comfortable. The Volvo quota raise (partner track) is the endgame that collapses the pool back
-toward one app; BYOK Premium remains the pressure valve and the resilience floor.
+toward one app; the own-key option remains the pressure valve and the resilience floor.
 
 **Partner track (ongoing from Phase 0):** structured outreach to `developer.portal@volvocars.com`:
 (1) written commercial-use confirmation; (2) daily-quota raise with our cache-efficiency and
@@ -632,8 +700,10 @@ endpoint. Any one of these landing removes a structural limitation.
 | Pool app suspended → default tier breaks at once | High | §6.1 emergency mass-migration to BYOK; multiple pool apps limit blast radius; partner track legitimizes the pool |
 | 7-day re-auth churns users out | High | Keepalive + nudges + one-click re-auth (§6.3); partner ask for longer grants; measure |
 | Commercial-terms ruling against paid third-party use | Med–High (default tier runs on Embay-published apps) | Phase-0 written confirmation gates paid launch of the default tier; free beta until answered; BYOK Premium as structural hedge + migration path; counsel review |
-| BYOK onboarding drop-off | Low (Premium-only — default tier has no wizard) | Guided wizard, live per-field validation, screenshots; completion-rate metric |
-| Support burden from misconfigured user apps | Med (Premium only) | Wizard validation (§6.1 steps 5/7); §6.5 connection diagnostics (dashboard re-test + in-band `connection_status`) name the exact broken credential/scope |
+| BYOK onboarding drop-off | Low (own-key users only — default tier has no wizard) | Guided wizard, live per-field validation, screenshots; completion-rate metric; auto-fallback to the pool (with notification) if a key dies |
+| Support burden from misconfigured user apps | Med (own-key users only) | Wizard validation (§6.1 steps 5/7); §6.5 connection diagnostics (dashboard re-test + in-band `connection_status`) name the exact broken credential/scope |
+| Paid managed user sees visible staleness ("one is forgivable, two is churn") | Med | ≤10-users/app pools for paid + auto-shard; SLO <0.1% of paid reads visibly stale; proactive apology + automatic credit on breach; never show own-key pitch to a paying managed user |
+| "Manufactured scarcity" accusation from the technical segment | Med | Publish reset behavior; keep exhaustion genuinely rare (<0.5% SLO); never tighten free-tier freshness post-launch to drive upgrades |
 | ~1 breaking API deprecation/year (CV v1 '24; VOC legacy, Energy v1, Extended Vehicle '25) | Med | Version pinning, release-notes watch, abstraction layer over endpoint families |
 | Server-side scope regressions (Dec 2025 & Apr 2026 live incidents broke location/token flows) | Med | Learned-403 cache + graceful degradation already absorb it; status page honesty |
 | Token lifetime changes again (1799 s → 299 s silently) | Low | Runtime `expires_in` only (§7.2) |
@@ -647,8 +717,11 @@ endpoint. Any one of these landing removes a structural limitation.
 
 **Product decisions (owner: you):**
 1. Final name/domain (§11 candidates; "volvo.io" recommended against).
-2. ~~Credential strategy~~ **Decided: managed default (Volvo ID only, sharded pool) + BYOK
-   Premium self-service upgrade** — per your direction; both tiers zero-operator-effort.
+2. ~~Credential strategy~~ **Decided: managed default (Volvo ID only, sharded pool) with a
+   self-service own-key (BYOK) option** — zero operator effort throughout. **To ratify:** the
+   §8.1 focus-group ladder refines your "BYOK as premium" direction — it makes BYOK an optional
+   architecture on *any* tier, priced *below* managed equivalents (user supplies capacity), with
+   paid tiers selling features (scheduling, alerts, household) rather than BYOK itself.
 3. EX90/ES90 as "beta" vs excluded until verified.
 4. Free beta until commercial confirmation vs credits from day one (PRD assumes free beta).
 
