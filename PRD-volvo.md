@@ -376,10 +376,29 @@ realistic active user burns **50–200 upstream calls/day ≈ 1–2% of their ow
   beyond it; per-user 403-quota breaker parses Volvo's "replenished in HH:MM:SS" countdown.
 - Per-minute limits (100 reads / 10 commands per Volvo ID + client) are per-user by construction —
   one user can never starve another.
-- **Why the managed tier waits:** a single central app's 10k/day sustains only ~40–60 DAU at
-  assistant-usage rates — pointless without a Volvo-granted raise. That raise (with our cache-
-  efficiency numbers as the business case) is a partner-track ask (§12), after which a central
-  "one-click" tier becomes the convenience option for non-technical users.
+- **Volvo program pricing: free.** "All APIs are free to use under the APIs Terms and Conditions";
+  no paid tier exists; quota raises are case-by-case ("valid reasoning and business case") with no
+  published pricing. Caveat: the T&C reserves the right to introduce fees at any time, and Volvo's
+  monetized channels (Smartcar, High Mobility — per-activated-vehicle pricing) show what at-scale
+  access is worth to them. Budget assumption: $0 upstream COGS today, fee risk tracked in §14.
+- **Managed tier scaling — multi-application pool.** A single central app's 10k/day sustains only
+  ~40–60 DAU at assistant-usage rates. Before a Volvo-granted raise lands, the managed tier can
+  scale via a pool of N Embay-published applications (creation/publish is free, instant,
+  self-service; no documented cap on apps per account):
+  - *User sharding (clean, by design):* each managed user is onboarded onto the least-loaded app
+    in the pool; their consent binds to that app's client_id; capacity scales linearly (10 apps ≈
+    500 DAU). Per-minute limits are per user+client anyway, so sharding only needs to solve the
+    daily quota — which it does. The ~7-day re-auth cycle doubles as a free **rebalancing point**:
+    route users to a different pool app when they re-consent.
+  - *API-key spillover (gray, verify before relying on it):* community evidence (volvo2mqtt
+    multi-key rotation) suggests the daily quota follows the `vcc-api-key` and keys may be
+    rotatable independently of the token's client. If verified (Phase 0 test: call with app A's
+    token + app B's key), true mid-cycle spillover works — but running an app fleet to circumvent
+    a per-app quota is classic "misuse"-clause territory, and suspension would hit every app on
+    the account at once. Use only transparently and modestly, with the official business-case
+    quota-raise request submitted in parallel.
+  - BYOK remains the default/backbone tier either way — private quota, resilience, better legal
+    posture. The pool exists so the managed tier needn't wait on Volvo.
 - Build-time verification: whether token-endpoint calls (volvoid host, no `vcc-api-key`) count
   against the API quota — assumed not, verify in week 1.
 - Ops alerting at 70/85/95% of any user's daily budget, plus fleet-wide anomaly alerts.
@@ -449,8 +468,9 @@ user data; prompts stay in the user's AI client — we receive only tool calls. 
 **Phase 0 — verification (parallel with build, ~1 week):**
 Legal checkpoint (§11). Build-time API verifications: honk-flash path (`/honk-flash` vs
 `/honk-and-flash`), token-endpoint quota accounting, live Energy v2 enum/unit spellings
-(`chargingStatus` values, power in W vs kW), demo-car test-token smoke tests of every endpoint
-in Appendix B.
+(`chargingStatus` values, power in W vs kW), the **key↔token binding test** (does app A's Bearer
+token work with app B's `vcc-api-key`? — decides whether §8 spillover is possible), demo-car
+test-token smoke tests of every endpoint in Appendix B.
 
 **Phase 1 — MVP (free beta):**
 - **15 tools**: the 9 reads + `start_climate`/`stop_climate` + `lock_vehicle`/`unlock_vehicle` +
@@ -470,9 +490,12 @@ mirroring mytesla.io** with "your key, your quota" as a marketed perk; Latin Ame
 spec repo (sibling of this one: README/TOOLS/SECURITY/ARCHITECTURE/PRIVACY, same audit-first
 positioning).
 
-**Phase 3 — managed convenience tier (gated on partner track):**
-One-click central published app for non-technical users — only viable after a Volvo quota raise;
-BYOK remains the power/default tier and the resilience floor.
+**Phase 3 — managed convenience tier (no longer hard-gated on partner track):**
+One-click onboarding for non-technical users backed by a **multi-application pool** (§8): user
+sharding across N Embay-published apps from day one of the tier, re-auth-cycle rebalancing,
+API-key spillover only if the Phase-0 key↔token binding test verifies it and counsel is
+comfortable. The Volvo quota raise (partner track) remains the endgame that collapses the pool
+back to one app; BYOK remains the power/default tier and the resilience floor.
 
 **Partner track (ongoing from Phase 0):** structured outreach to `developer.portal@volvocars.com`:
 (1) written commercial-use confirmation; (2) daily-quota raise with our cache-efficiency and
@@ -505,6 +528,8 @@ endpoint. Any one of these landing removes a structural limitation.
 | ~1 breaking API deprecation/year (CV v1 '24; VOC legacy, Energy v1, Extended Vehicle '25) | Med | Version pinning, release-notes watch, abstraction layer over endpoint families |
 | Server-side scope regressions (Dec 2025 & Apr 2026 live incidents broke location/token flows) | Med | Learned-403 cache + graceful degradation already absorb it; status page honesty |
 | Token lifetime changes again (1799 s → 299 s silently) | Low | Runtime `expires_in` only (§7.2) |
+| Volvo introduces API fees (right reserved in T&C) | Low–Med | $0 COGS assumption revisited quarterly; aggregator per-vehicle pricing as the cost ceiling benchmark; BYOK shifts any per-app fee to a user decision |
+| Multi-app pool read as quota circumvention ("misuse" clause) | Med (managed tier only) | Transparent modest pool + parallel official quota-raise request; sharding (clean) preferred over spillover (gray); counsel review before spillover ships |
 | EX90/ES90 partial support embarrasses the product on Volvo's flagships | Med | "Beta — limited data" gating + capability discovery; recruit owner-testers in beta |
 | honk-flash path discrepancy | Low | Phase-0 verification |
 | Vehicle images ride an undocumented internal host | Low | Best-effort decoration only |
