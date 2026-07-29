@@ -505,9 +505,10 @@ customer) synthesized by a pricing pass. **Core principles (unanimous or near-un
    the product for non-technical/premium buyers.
 3. **Own-key plans are always priced below their managed equivalent** — the user supplies the
    capacity; violating this reads as rent-seeking to the evangelist segment.
-4. **Paid tiers sell features with real marginal cost** (scheduled actions, proactive alerts,
-   household/multi-car, audit) — **never escape from degradation**. Nobody pays to fix what
-   pooling broke; free + own key fixes freshness for $0.
+4. **Paid tiers sell service quality and features with real cost** (managed low-ratio capacity
+   with an SLO, concierge re-auth, multi-car, audit) — **never manufactured degradation**.
+   Nobody is forced to pay to fix what pooling broke; free + own key remains the $0 freshness
+   fix.
 
 **Proposed ladder** (⚠️ GATE = contingent on the Phase-0 Volvo commercial-terms answer; own-key
 and Free tiers are not gated):
@@ -516,9 +517,23 @@ and Free tiers are not gated):
 |---|---|---|---|
 | **Free** | $0 | Shared pool (target ≤35 users/app) | All commands always instant; security-state reads (locks/doors) always live; ~30 live data refreshes/day, unlimited cached answers with freshness labels; 1 car |
 | **Free + own key** | $0 | User's private 10k/day | Same features, always-fresh reads |
-| **Plus (managed)** ⚠️ | ~$5/mo · $50/yr | Low-ratio pool (≤10 users/app) | "Always fresh, always on"; scheduled actions (preheat 7:45 school days); proactive alerts (charging done, unlocked at night); fetch-audit log; concierge re-auth |
-| **Plus + own key** | ~$3/mo | User's private 10k/day | Everything in Plus with high-frequency polling on own headroom + full privacy story (per-key audit, EU processing docs) |
-| **Household (managed)** ⚠️ | ~$14/mo | Low-ratio pools per car | Plus for up to 4 vehicles incl. Tesla via mytesla bundle; sub-users; one wallet |
+| **Plus (managed)** ⚠️ | ~$4–5/mo · $40–50/yr | Low-ratio pool (≤10 users/app) | "Always fresh, always on" + written reliability SLO with automatic credit on breach; concierge re-auth (pre-expiry push, one tap); fetch-audit log + one-button revoke |
+| **Plus + own key** | ~$3/mo | User's private 10k/day | Everything in Plus on the user's own headroom + full privacy pack (per-key audit, EU processing/DPA docs) |
+| **Add-a-car add-on** ⚠️ | ~+$2–3/mo per extra vehicle | per the account's capacity model | Extra vehicles on one account & wallet — including cross-brand (Tesla via the mytesla bundle); sub-users (e.g. teen drivers) |
+
+**Owner revisions to the feature pillars (decided, supersede the focus-group draft):**
+- **Scheduled actions: cut.** Duplicative twice over — the user's AI client already runs
+  scheduled tasks that can call our tools, and the Volvo app has its own preconditioning timers.
+  Requirement reduced to: tools behave correctly when invoked by a client-side scheduled run.
+- **Proactive alerts: event-based only, as policy.** The public Volvo API has **no webhooks or
+  events — polling only** — so alerts do not ship at launch. De-duplicate against Volvo-app
+  notifications (e.g. charging complete) if/when they return. Paths to events: the partner-track
+  ask to Volvo (webhooks/telemetry), or Volvo's event-capable paid channel (Smartcar webhooks,
+  per-vehicle licensing COGS) if ever licensed. Open sub-decision (§15): a poll-based "nightly
+  check-in" ("22:30 check: car unlocked — lock it?") is quota-cheap and timestamp-honest
+  (explicitly point-in-time, not a pretend event), but may be equally client-schedulable.
+- **Household tier: demoted to an add-on.** The multi-Volvo-plus-AI cohort is small; the
+  realistic multi-car story is cross-brand (Tesla + Volvo households) via the mytesla wallet.
 
 Billing: **flat subscription** (personas reject credit metering); mytesla credits accepted as a
 **payment rail** for the same plans. If the ⚠️ GATE answer is negative: reprice managed tiers on
@@ -553,8 +568,8 @@ optionally one calm sentence at signup — **A/B test this** (the one genuine pe
 disagreement). Don't market own-key as "set and forget" — the 7-day Volvo re-login applies to
 both architectures.
 
-**Pre-lock measurements (beta):** signup BYOK one-liner vs none; Plus $4 vs $6 (Household
-$12 vs $18); Volvo-attributed vs neutral degradation copy (7-day retention after first
+**Pre-lock measurements (beta):** signup BYOK one-liner vs none; Plus $4 vs $6 (add-a-car
+$2 vs $4); Volvo-attributed vs neutral degradation copy (7-day retention after first
 limit-hit); 20 vs 40 live-refresh allowance + real per-user call distribution (validates pool
 ratios before charging); first-staleness card vs day-14 milestone trigger; mytesla-wallet vs
 separate-billing cohorts. **Operational gates before paid launch:** pool exhaustion <0.5% of
@@ -704,6 +719,7 @@ endpoint. Any one of these landing removes a structural limitation.
 | Support burden from misconfigured user apps | Med (own-key users only) | Wizard validation (§6.1 steps 5/7); §6.5 connection diagnostics (dashboard re-test + in-band `connection_status`) name the exact broken credential/scope |
 | Paid managed user sees visible staleness ("one is forgivable, two is churn") | Med | ≤10-users/app pools for paid + auto-shard; SLO <0.1% of paid reads visibly stale; proactive apology + automatic credit on breach; never show own-key pitch to a paying managed user |
 | "Manufactured scarcity" accusation from the technical segment | Med | Publish reset behavior; keep exhaustion genuinely rare (<0.5% SLO); never tighten free-tier freshness post-launch to drive upgrades |
+| Thinner paid perk stack (post scheduling/alerts cuts) → weak free→paid conversion | Med | Price at the lower anchor (~$4); add-a-car add-on; §8.1 A/B tests gate pricing; tune the free live-check allowance (30→20) before ever touching freshness or commands; alerts return as a perk if an event source materializes |
 | ~1 breaking API deprecation/year (CV v1 '24; VOC legacy, Energy v1, Extended Vehicle '25) | Med | Version pinning, release-notes watch, abstraction layer over endpoint families |
 | Server-side scope regressions (Dec 2025 & Apr 2026 live incidents broke location/token flows) | Med | Learned-403 cache + graceful degradation already absorb it; status page honesty |
 | Token lifetime changes again (1799 s → 299 s silently) | Low | Runtime `expires_in` only (§7.2) |
@@ -719,9 +735,14 @@ endpoint. Any one of these landing removes a structural limitation.
 1. Final name/domain (§11 candidates; "volvo.io" recommended against).
 2. ~~Credential strategy~~ **Decided: managed default (Volvo ID only, sharded pool) with a
    self-service own-key (BYOK) option** — zero operator effort throughout. **To ratify:** the
-   §8.1 focus-group ladder refines your "BYOK as premium" direction — it makes BYOK an optional
-   architecture on *any* tier, priced *below* managed equivalents (user supplies capacity), with
-   paid tiers selling features (scheduling, alerts, household) rather than BYOK itself.
+   §8.1 ladder makes BYOK an optional architecture on *any* tier, priced *below* managed
+   equivalents (user supplies capacity), with paid tiers selling service quality (always-fresh
+   SLO, concierge re-auth, audit, add-a-car) rather than BYOK itself. **Decided (owner):**
+   scheduled actions cut (client-side scheduling covers it); proactive alerts are event-based
+   only (⇒ not shipped on the public API, which is poll-only); Household demoted to an
+   add-a-car add-on.
+   **Open:** ship the poll-based "nightly check-in" (§8.1) or leave point-in-time checks to
+   client-side scheduling too?
 3. EX90/ES90 as "beta" vs excluded until verified.
 4. Free beta until commercial confirmation vs credits from day one (PRD assumes free beta).
 
