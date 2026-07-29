@@ -13,8 +13,8 @@ Location APIs** — in plain English.
 | **Transport** | Streamable HTTP MCP endpoint, OAuth 2.1 + dynamic client registration (RFC 7591) — identical to mytesla.io |
 | **Tool count** | **19 fixed tools** — no drive tool, and (by Volvo API design) **no charging control** |
 | **Credential model** | **BYOK-first**: each user brings their own Volvo API application (private 10k/day quota — "your key, your quota, your kill switch") |
-| **Markets at launch** | Europe / Middle East / Africa + US / Canada (Volvo production regions; **no APAC**) |
-| **Research basis** | Deep-dive of developer.volvocars.com (2026-07-29), Volvo's own OpenAPI spec, Volvo's official sample repo, and production clients (official Home Assistant `volvo` integration, evcc, homebridge-volvoEX30, volvo2mqtt). Confidence labels carried through; unverified items are marked and collected in §15. |
+| **Markets at launch** | EMEA + US/Canada — a subset of Volvo's production regions (LatAm deferred to Phase 2; **no APAC exists upstream**) |
+| **Research basis** | Deep-dive of developer.volvocars.com content, triangulated 2026-07-29 (portal not directly fetchable — see Appendix E): Volvo's own OpenAPI spec, Volvo's official sample repo, and production clients (official Home Assistant `volvo` integration, evcc, homebridge-volvoEX30, volvo2mqtt). Confidence labels carried through; unverified items are marked and collected in §15. |
 
 **The honest headline:** Volvo's public API is **read-rich and command-poor**. Only 10 of mytesla's
 40 tools survive the port; 30 are infeasible upstream (§4). There is no charging control, no
@@ -29,7 +29,7 @@ climate on/off, honk/flash** — surfaced through the same trusted MCP experienc
 
 Volvo owners connect their car once, then talk to it through the AI assistant they already use:
 
-> "Is the car locked? … Lock it." · "How charged is the EX30, and when will it hit the target?" ·
+> "Is the car locked? … Lock it." · "How charged is the EX40, and when will it hit the target?" ·
 > "Warm the car up." · "Where did I park?" · "Anything wrong with the car? When is service due?"
 
 Same product thesis as mytesla.io: the assistant is the interface; we are the secure, auditable
@@ -42,7 +42,7 @@ Two structural constraints shape everything below and are treated as design inpu
 1. **Quota:** every Volvo API application gets ~10,000 requests/day. → BYOK-first credential
    model (§6.1, §8) so each user brings their own private quota.
 2. **Re-auth:** self-published Volvo apps have a ~7-day refresh-token grant. → keepalive refresh
-   job + graceful re-auth UX (§7.3), partner track to remove it (§12).
+   job + graceful re-auth UX (§6.3), partner track to remove it (§12).
 
 ## 2. Goals / non-goals
 
@@ -94,7 +94,7 @@ Disposition of all 40 mytesla tools. **10 kept** (4 as-is: `get_credit_balance`,
 | mytesla tool | Disposition | Volvo mapping / reason |
 |---|---|---|
 | `get_vehicles` | **Kept+** | CV v2 `GET /vehicles` + `/vehicles/{vin}` — gains model year, fuel type, battery kWh, colour, images, per-VIN capability summary |
-| `get_vehicle_status` | **Kept~** | Sectioned, cached composite of up to 9 GETs (§5.2); no climate-state readback exists |
+| `get_vehicle_status` | **Kept~** | Sectioned, cached composite of up to 13 live GETs (§5.2); no climate-state readback exists |
 | `get_credit_balance` | **Kept** | Product-side |
 | `wake_vehicle` | **Cut → replaced** | No wake command; replaced by `check_vehicle_reachability` |
 | `start_climate` / `stop_climate` | **Kept~** | All-or-nothing `climatization-start/stop`; no setpoint; EX30 quirk (§5.4) |
@@ -150,8 +150,10 @@ Scope strings below are in addition to `openid`; endpoint paths are relative to
 | `check_vehicle_reachability` | "Can the car receive commands right now, and which does it support?" — the Volvo replacement for `wake_vehicle` | `vin` | `GET …/{vin}/command-accessibility`; cached `…/{vin}/commands` | `conve:command_accessibility`, `conve:commands` | read-only |
 | `get_credit_balance` | Remaining product credits | — | internal | — | read-only |
 
-*Note:* tyre data is **warning states only** — Volvo exposes no PSI/kPa values. The tool
-description says so, so the assistant never promises pressures.
+*Notes:* tyre data is **warning states only** — Volvo exposes no PSI/kPa values; the tool
+description says so, so the assistant never promises pressures. On the **EX30**, target-SoC and
+current-limit fields are unsupported — `get_charging_status` returns them as `unsupported` per
+§5.5 and still answers SoC/range/charging state (time-to-target is omitted when no target exists).
 
 ### 5.2 `get_vehicle_status` composition (the quota-critical tool)
 
@@ -178,8 +180,9 @@ Rules:
   upstream fetch.
 - **Serve-stale:** if a user's daily budget is exhausted (§8), return cached data with an explicit
   `data_age` field instead of erroring.
-- **Timestamps always pass through.** Every Volvo field carries `{value, unit?, timestamp}`; the
-  tool returns them so the assistant can say "as of 14:02".
+- **Timestamps always pass through.** Every datapoint is normalized to `{value, unit?, timestamp}`
+  per §5.5 (Energy's `updatedAt` → `timestamp`; per-field `status: ERROR` → `value: null` with
+  reason) so the assistant can say "as of 14:02".
 
 ### 5.3 Cross-cutting command behavior
 
@@ -187,14 +190,16 @@ Rules:
    (TTL ≤ 60 s). If the car is unavailable, fail fast with the `unavailableReason` and the message:
    *"Volvo provides no wake command — the car must wake on its own (e.g. someone opens a door or
    the Volvo app connects)."*
-2. **`invokeStatus` mapping.** Commands are a single synchronous POST returning
-   `{vin, invokeStatus, message}` (no async job, no polling endpoint). The 22-value enum
-   (Appendix C) maps to four user-facing outcomes: **success** (`COMPLETED/SUCCESS/DELIVERED/SENT`),
+2. **`invokeStatus` mapping.** Commands are a single synchronous POST (no async job, no polling
+   endpoint) returning the standard envelope with `data = {vin, invokeStatus, message}`
+   (Appendix B). The 22-value enum (Appendix C) maps to five §5.5 outcome classes:
+   **success** (`COMPLETED/SUCCESS/DELIVERED/SENT`),
+   **pending** (`WAITING/RUNNING` → "command accepted — verify with a fresh status read"),
    **asleep/unreachable** (`VEHICLE_IN_SLEEP/CAR_IN_SLEEP_MODE/TIMEOUT/CAR_TIMEOUT/CONNECTION_FAILURE/DELIVERY_TIMEOUT/EXPIRED`),
    **blocked** (`NOT_ALLOWED_PRIVACY_ENABLED` → "check the car's in-car privacy settings";
    `NOT_ALLOWED_WRONG_USAGE_MODE` → "the car is in use/driving"; `NOT_SUPPORTED`;
    `UNLOCK_TIME_FRAME_PASSED`; `UNABLE_TO_LOCK_DOOR_OPEN`), **error** (rest). Raw status included
-   in a `details` field.
+   in `details.invokeStatus`.
 3. **Per-VIN capability gating.** Tools a specific car doesn't support (from its `/commands` list)
    return a structured "not supported by this vehicle" without burning an upstream command call —
    the same pattern the official Home Assistant integration uses.
@@ -217,12 +222,46 @@ Rules:
 | `stop_engine` | Stop a remote-started engine | `vin` | `POST …/commands/engine-stop` | `conve:engine_start_stop` | write |
 | `report_bug` | Send feedback to the operator (free, no vehicle action) | `description` | internal | — | write |
 
+### 5.5 Tool result & error envelope (the MCP-facing contract)
+
+MCP `isError` is reserved for product-level failures (invalid params, unauthenticated session).
+Everything vehicle-level — degradation, staleness, blocks, command outcomes — is an **in-band
+structured result** so the assistant can explain it:
+
+- **Command tools** return `{outcome: "success"|"pending"|"asleep"|"blocked"|"error",
+  message: <one-line user-facing>, details: {invokeStatus, ...}}` — `unlock` adds
+  `ready_until` (ISO-8601) translated into the message.
+- **Composite reads** (`get_vehicle_status`) return per-section objects:
+  `{status: "ok"|"stale"|"blocked"|"unsupported"|"error", data, data_age_seconds, reason?}` —
+  a privacy-blocked location is `blocked` with a reason, not an omission.
+- **Datapoint normalization:** every upstream field becomes `{value, unit?, timestamp}`
+  (Energy's `updatedAt` maps to `timestamp`; an Energy field with `status: "ERROR"` or an
+  unsupported capability yields `value: null` + `status` passed through in `reason`).
+- **Account-level:** `get_vehicles` carries `connection_status` and `reauth_url` (§6.5).
+
 **What is *not* here** (mirroring mytesla's closing statement): no tool steers, accelerates,
 brakes, or moves the vehicle — and unlike mytesla, no tool starts, stops, limits, or schedules
 charging, because Volvo's public API has no such endpoints. If Volvo ships charging control
 (their partner channel already has schedules), it becomes the highest-priority manifest addition.
 
 ## 6. UX flows
+
+### 6.0 Onboarding surface & account model (new vs mytesla)
+
+mytesla.io onboards entirely inside OAuth-on-first-connect; BYOK needs a place to paste secrets,
+so this product adds a **web dashboard** at the product domain. The model:
+
+- **Account:** created during the MCP OAuth 2.1 first-connect flow — the server-hosted
+  authorization page signs the user up (email + passkey/password, email verified). The email
+  powers the §6.3 re-auth nudges and the credit ledger. The MCP OAuth grant maps to this account
+  ID; **BYOK credentials, Volvo tokens, caches, and budgets are all keyed to it.**
+- **Flow ordering (first connect):** MCP client connect → server-hosted authorization page
+  (signup/login) → **BYOK wizard** (§6.1) → Volvo ID consent (§6.1 step 6) → redirect back to
+  the MCP client with the grant. A user who abandons mid-wizard can resume from the dashboard.
+- **Dashboard (logged-in, reachable any time):** BYOK credential entry/rotation, **"re-test my
+  connection"** diagnostic (§6.5), re-auth button, connected-cars list, credits/billing (Phase 2),
+  data-deletion self-service. The §6.3 "one-line re-auth URL" returned in tool results is a
+  deep link into this dashboard.
 
 ### 6.1 Onboarding — BYOK wizard (primary flow)
 
@@ -244,10 +283,14 @@ validation:
 4. Copy the **`client id` and `client secret`** from Volvo's confirmation page into the wizard.
    The app may display **"Publication under Review" — this is normal and it works immediately**
    (Volvo's publish has been instant/self-service since Jan 2025).
-5. Wizard runs a **live test call** with the pasted credentials and reports exactly what's wrong
-   if anything fails (bad key / bad secret / redirect mismatch / missing scope).
+5. **Pre-OAuth validation** — the wizard checks what is checkable *before* consent: credential
+   format (key/secret shape, stray whitespace), a probe call distinguishing a bad `vcc-api-key`
+   from a missing token, and an authorize-endpoint probe that surfaces redirect-URI mismatches.
 6. **Volvo ID login + consent** — Volvo's own browser consent screen, scope-by-scope. Users may
    under-consent; affected tools degrade gracefully rather than failing the session (§7.1).
+7. **Post-consent validation** — token exchange success proves the `client_secret`; the wizard
+   diffs granted scopes against the expected full list and a first `GET /vehicles` proves
+   end-to-end, reporting exactly which credential or scope is broken if anything fails.
 
 No virtual-key ceremony, no in-car approval step — the VIN↔Volvo-ID link made during normal car
 onboarding in the Volvo app *is* the pairing. **Simpler than Tesla onboarding.**
@@ -276,10 +319,24 @@ Self-published Volvo apps (BYOK included) carry a ~7-day refresh-token grant (§
   per-account `connection_status` flag so the assistant can warn proactively.
 - Re-auth completion rate is a first-class metric (§13).
 
-### 6.4 Command failures & revocation
+### 6.4 Command failures
 
 Failure UX per §5.3 (asleep / privacy-blocked / driving / unsupported — each with a one-line,
-actionable message). Revocation trifecta, any of which stops everything instantly:
+actionable message).
+
+### 6.5 Connection diagnostics (the §14 support-burden mitigation, specified)
+
+Two surfaces name the exact broken thing rather than a generic error:
+- **Dashboard "re-test my connection"** re-runs the §6.1 step-5/7 validation suite on demand and
+  reports per-item pass/fail (API key, secret, redirect URI, each scope, token freshness,
+  per-car reachability).
+- **In-band:** `get_vehicles` returns a per-account `connection_status`
+  (`ok | reauth_required | credential_invalid:<which> | scope_missing:<scope> | quota_exhausted`)
+  plus `reauth_url` when actionable, so the assistant can tell the user precisely what to fix.
+
+### 6.6 Revocation
+
+Revocation trifecta, any of which stops everything instantly:
 **(1)** delete the API application in Volvo's developer portal (BYOK kill switch),
 **(2)** revoke consent in Volvo ID / in-car privacy settings, **(3)** remove the MCP connector.
 
@@ -344,10 +401,23 @@ changes as expected.
   `GET /capabilities` (which datapoints), learned 403/404s. Gates tool availability, status
   fan-out, and `check_vehicle_reachability` output. Mandatory: EX30/EX90/ES90 all have partial
   surfaces, and engine-start exists only on legacy VOC cars.
-- Regions: production coverage EMEA + US/Canada/Latin America; clients model `eu`/`na` API
-  regions; **auth host is EU-only for all users**. Store a per-user region hint. No APAC.
+- Regions: production coverage EMEA + US/Canada/Latin America; **single global API base and
+  EU-only auth host today** (Appendix B) — reference clients model `eu`/`na` regions but no
+  regional API host is documented. The stored per-user region hint drives **market-eligibility
+  checks and support copy only** (and would select a regional base URL if Volvo ever ships one).
+  No APAC.
 - Vehicle images/details in reference clients come from an undocumented internal
   `*.volvocars.biz` BFF host — treat images as **best-effort decoration**, never load-bearing.
+
+### 7.6 State map (Cloudflare Workers primitives — isolates share no memory)
+
+| State | Store | Notes |
+|---|---|---|
+| Accounts, credit ledger, BYOK credentials (encrypted), Volvo tokens (encrypted) | **D1** (SQL) | Row-level per-account; parameterized queries |
+| Refresh-token serialization + per-user token state | **Durable Object per account** | The §7.3 single-writer; DO alarm doubles as that user's 24–48 h keepalive timer (no global cron fan-out) |
+| Response caches, single-flight coalescing, learned 403/404 capability data, per-user daily budget counters | **Durable Object per VIN** | All upstream fetches for a VIN route through its DO → single-flight is free; TTLs per §5.2; budget check before fetch |
+| Static/slow caches shared across sessions (vehicle details, `/commands`, `/capabilities`) | DO storage (per-VIN) with **KV** as optional warm layer | 24 h TTL |
+| Grant-lifetime & quota telemetry (aggregate) | Workers Analytics Engine / D1 rollups | Feeds §13 metrics and §7.3's empirical grant question |
 
 ### 7.5 Error taxonomy (upstream → product)
 
@@ -367,9 +437,10 @@ changes as expected.
 **BYOK changes the game.** Each user's private application quota is ~10,000 requests/day
 (primary + secondary key share it). An MCP product is **on-demand** — it calls upstream only when
 the user asks something (unlike Home Assistant's ~12-calls-per-poll-cycle continuous polling). A
-realistic active user burns **50–200 upstream calls/day ≈ 1–2% of their own quota**. Effects:
+realistic active user burns **50–200 upstream calls/day**. Effects:
 
-- No shared ceiling, no waitlist, no quota COGS. Multi-vehicle households: fine.
+- That's **≈ 0.5–2% of their own quota** — no shared ceiling, no waitlist, no quota COGS.
+  Multi-vehicle households: fine.
 - The caching/coalescing stack (§5.2) still ships — it's what makes reads feel instant, keeps
   headroom for chatty assistant sessions, and protects pathological clients.
 - Per-user daily budget (default ~1,000 upstream calls — 10% of their quota) with serve-stale
@@ -381,8 +452,9 @@ realistic active user burns **50–200 upstream calls/day ≈ 1–2% of their ow
   published pricing. Caveat: the T&C reserves the right to introduce fees at any time, and Volvo's
   monetized channels (Smartcar, High Mobility — per-activated-vehicle pricing) show what at-scale
   access is worth to them. Budget assumption: $0 upstream COGS today, fee risk tracked in §14.
-- **Managed tier scaling — multi-application pool.** A single central app's 10k/day sustains only
-  ~40–60 DAU at assistant-usage rates. Before a Volvo-granted raise lands, the managed tier can
+- **Managed tier scaling — multi-application pool.** A single central app's 10k/day sustains
+  ~50–200 DAU at the assistant-usage range above — **plan for ~50** (heavy users, cache-miss
+  headroom; ~40–60 under HA-style continuous polling, the conservative benchmark). Before a Volvo-granted raise lands, the managed tier can
   scale via a pool of N Embay-published applications (creation/publish is free, instant,
   self-service; no documented cap on apps per account):
   - *User sharding (clean, by design):* each managed user is onboarded onto the least-loaded app
@@ -428,7 +500,13 @@ user data; prompts stay in the user's AI client — we receive only tool calls. 
   indemnity explicitly covers data-protection obligations — the operator carries controller-style
   responsibility. Per-user OAuth consent + minimal scope use + no credential sharing mirrors
   Volvo's own consent-first design. DPO contact and records-of-processing from day one.
-- Cache entries are per-user, encrypted at rest, and expire on TTL; `location` cache ≤ 60 s.
+- **What we keep (delta vs mytesla's list):** account email · credit ledger · encrypted Volvo
+  tokens · **encrypted BYOK credentials** (client_id/secret, VCC API key — until disconnect or
+  deletion) · short-TTL response caches (§5.2; location ≤ 60 s) · learned capability/403 data
+  (≤ 24 h) · per-user region hint · `vcc-api-operationId` request logs (30-day retention,
+  supportability only) · aggregate grant-lifetime/quota telemetry (no vehicle data). Each with
+  stated retention in the public privacy policy.
+- Cache entries are per-user, encrypted at rest, and expire on TTL.
 - In-car privacy toggles are respected end-to-end: if the car says no, we surface "blocked by
   in-car privacy setting" and cache the block — we never try to route around it.
 
@@ -450,10 +528,11 @@ user data; prompts stay in the user's AI client — we receive only tool calls. 
   later), `scandicar.io`, `mylagom.io`, or Embay umbrella `mycar.io/volvo`. Domain availability
   to be verified at decision time. *(Decision owner: you. This PRD proceeds name-TBD.)*
 - **Commercial use — verification checkpoint (de-risked by BYOK, still do it):** No
-  "development-only/non-production" clause exists for Volvo Cars' portal (that language belongs
-  to Volvo *CE*'s portal — a different legal entity). But no affirmative commercial grant was
-  found either, and the operative APIs "Specific Agreement" (updated 2026-01-27) could not be
-  read from the research environment (loads fine in a normal browser). **Action, Phase 0:** read
+  "development-only/non-production" clause **was found** for Volvo Cars' portal — the circulating
+  "dev-only" language belongs to Volvo *CE*'s portal, a different legal entity — but the operative
+  APIs "Specific Agreement" (updated 2026-01-27) could not be read from the research environment
+  (loads fine in a normal browser), so **such a restriction cannot yet be ruled out**, and no
+  affirmative commercial grant was found either. **Action, Phase 0:** read
   both T&C pages in a browser; email `developer.portal@volvocars.com` asking whether a paid
   third-party consumer product may operate against user-owned API applications (BYOK) and/or as
   a published app. Under BYOK each owner accesses their own car under their own T&C acceptance
@@ -474,14 +553,17 @@ test-token smoke tests of every endpoint in Appendix B.
 
 **Phase 1 — MVP (free beta):**
 - **15 tools**: the 9 reads + `start_climate`/`stop_climate` + `lock_vehicle`/`unlock_vehicle` +
-  `flash_lights` + `report_bug`. (Held back: `honk_horn`/`honk_and_flash` pending cooldown
-  safeguards; `start_engine`/`stop_engine` pending access to a legacy VOC test car.)
+  `flash_lights` + `report_bug`. The §5.3 command limiter **and** the honk/flash cooldown ship in
+  Phase 1 and apply to `flash_lights`. (Held back: `honk_horn`/`honk_and_flash` — audible-alert
+  tools deferred until real-car beta validation of nuisance/battery behavior;
+  `start_engine`/`stop_engine` pending access to a legacy VOC test car.)
 - **BYOK-first onboarding** (§6.1) — no user cap. Free while beta.
-- Markets: EMEA + US/Canada. Cars: verified set as **supported** (EX30, EX40/XC40 BEV, EC40/C40,
-  MY2022+ Google-Built-In PHEVs), VOC MY2010–2024 **best-effort**, **EX90/ES90 "beta — limited
+- Markets: EMEA + US/Canada. Cars: verified set as **supported** (EX30, EX40/XC40 BEV, EC40/C40;
+  Google-Built-In PHEVs per Appendix D: XC60/S90/V90 MY2022+, XC90/S60/V60 MY2023+), earlier
+  PHEVs and VOC MY2010–2024 **best-effort**, **EX90/ES90 "beta — limited
   data"** (not in the May-2026 Energy availability list; open climatization-stop failure reports;
   gate expectations in product copy until verified against real cars).
-- Full §5.2 caching stack, §7.3 keepalive + re-auth flow, capability discovery, status endpoint,
+- Full §5.2 caching stack, §6.3 keepalive + re-auth flow, capability discovery, status endpoint,
   server card, grant-lifetime telemetry.
 
 **Phase 2 — v1:**
@@ -524,7 +606,7 @@ endpoint. Any one of these landing removes a structural limitation.
 | 7-day re-auth churns users out | High | Keepalive + nudges + one-click re-auth (§6.3); partner ask for longer grants; measure |
 | Commercial-terms ruling against paid third-party use | Med (lowered by BYOK) | Phase-0 written confirmation; free beta until answered; BYOK posture; counsel review |
 | BYOK onboarding drop-off | Med | Guided wizard, live per-field validation, screenshots; completion-rate metric; managed tier later |
-| Support burden from misconfigured user apps | Med | Wizard validation; diagnostic tool that names the exact broken credential/scope |
+| Support burden from misconfigured user apps | Med | Wizard validation (§6.1 steps 5/7); §6.5 connection diagnostics (dashboard re-test + in-band `connection_status`) name the exact broken credential/scope |
 | ~1 breaking API deprecation/year (CV v1 '24; VOC legacy, Energy v1, Extended Vehicle '25) | Med | Version pinning, release-notes watch, abstraction layer over endpoint families |
 | Server-side scope regressions (Dec 2025 & Apr 2026 live incidents broke location/token flows) | Med | Learned-403 cache + graceful degradation already absorb it; status page honesty |
 | Token lifetime changes again (1799 s → 299 s silently) | Low | Runtime `expires_in` only (§7.2) |
@@ -576,8 +658,10 @@ wrong; production uses `location:read`.)
 Commands, all POST under `/vehicles/{vin}/commands/`:
 `lock` · `lock-reduced-guard` · `unlock` · `climatization-start` · `climatization-stop` ·
 `engine-start` (body `{"runtimeMinutes": 0–15}`) · `engine-stop` · `honk` · `flash` ·
-`honk-flash`. Response envelope `{status, operationId, data}`; datapoints are
-`{value, unit?, timestamp}`.
+`honk-flash`. Response envelope `{status, operationId, data}` on reads **and** commands —
+read datapoints are `{value, unit?, timestamp}`; command responses carry
+`data = {vin, invokeStatus, message}` (unlock adds `readyToUnlock`, `readyToUnlockUntil`
+epoch-ms).
 
 **Energy v2** (`/energy/v2`): `GET /vehicles/{vin}/state` — fields incl. `batteryChargeLevel` (%),
 `targetBatteryChargeLevel` (RO), `electricRange`, `chargerConnectionStatus`
