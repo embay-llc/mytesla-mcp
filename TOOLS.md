@@ -5,11 +5,17 @@ not change based on what a client asks for, and there is **no tool that drives
 the car**. Each tool is annotated below with an MCP-standard hint:
 
 - **read-only** (`readOnlyHint: true`) — returns data, changes nothing.
-- **write** (`readOnlyHint: false`) — changes vehicle state; reversible and
-  low-consequence.
+- **write** (`readOnlyHint: false, destructiveHint: true`) — changes vehicle
+  state; reversible and low-consequence.
 - **write · sensitive** (`readOnlyHint: false, destructiveHint: true`) — grants
   physical access or changes a security setting. PIN-protected actions require a
   PIN the user sets; the AI cannot bypass it.
+
+Every tool that changes anything declares `destructiveHint: true`, so your AI
+asks before it runs one for the first time. The **write** vs **write ·
+sensitive** split above is our own description of consequence, not a difference
+in the hint: we would rather a tool that unlocks a door never look routine
+because it happens to be reversible.
 
 All command tools are signed requests through Tesla's official Fleet API and
 Vehicle Command Protocol. All tool inputs are validated with strict schemas
@@ -44,7 +50,7 @@ before any upstream call.
 | `set_charge_limit` | write | Set charge % limit |
 | `set_charging_amps` | write | Set charge current |
 | `open_charge_port` | write | Open the charge port |
-| `close_charge_port` | write · sensitive | Close the charge port |
+| `close_charge_port` | write | Close the charge port |
 | `set_scheduled_charging` | write | Schedule a charge window |
 | `set_scheduled_departure` | write | Schedule departure / precondition-by-time |
 
@@ -71,7 +77,7 @@ before any upstream call.
 
 | Tool | Hint | Purpose |
 |---|---|---|
-| `set_sentry_mode` | write | Toggle Sentry Mode |
+| `set_sentry_mode` | write · sensitive | Toggle Sentry Mode (security setting) |
 | `set_valet_mode` | write · sensitive | Enable/disable Valet Mode (PIN) |
 | `reset_valet_pin` | write · sensitive | Reset the Valet PIN |
 | `set_speed_limit` | write · sensitive | Set a speed limit (PIN) |
