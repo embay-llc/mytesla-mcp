@@ -14,9 +14,21 @@ short summary for quick auditing.
 ## What we keep
 
 Only what's needed to run the service: your account (email), subscription and
-credit-ledger records, and the encrypted Tesla OAuth tokens required to send the
+usage records, and the encrypted Tesla OAuth tokens required to send the
 commands you ask for. Tesla tokens are encrypted at rest (AES-256-GCM) and
 rotated on refresh.
+
+We also keep two identifiers from your Tesla connection:
+
+- **Your Tesla account identifier** (the ID Tesla assigns your login, not your
+  password), kept with your Tesla connection.
+- **Your vehicles' VINs**, so support can see which cars an account covers,
+  plus a keyed one-way hash of each VIN (not the VIN itself). The hash is used
+  only to notice when two accounts share the same car or Tesla login; it
+  alerts our team and blocks nothing.
+
+All of it is erased when you delete your account. Retention details are in the
+full policy.
 
 ## Your prompts
 
@@ -30,4 +42,4 @@ You can revoke mytesla.io's access to your Tesla at any time from your Tesla
 account's third-party-apps settings, and remove the connector from your AI
 client. Either action immediately stops any further access.
 
-Questions: **privacy@mytesla.io**.
+Questions: **support@mytesla.io**.
