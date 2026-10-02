@@ -10,9 +10,13 @@ the car**. Each tool is annotated below with an MCP-standard hint:
 - **write · sensitive** (`readOnlyHint: false, destructiveHint: true`) — grants
   physical access or changes a security setting. PIN-protected actions require a
   PIN the user sets; the AI cannot bypass it.
+- **write · off-car** (`readOnlyHint: false, destructiveHint: false`): sends
+  something to mytesla.io and changes nothing on the car. Only `report_bug`.
 
-Every tool that changes anything declares `destructiveHint: true`, so your AI
-asks before it runs one for the first time. The **write** vs **write ·
+Every tool that changes anything on the car declares `destructiveHint: true`,
+so your AI asks before it runs one for the first time. The car is the object:
+`report_bug`, which only sends feedback to mytesla.io, is the one write that is
+not destructive. The **write** vs **write ·
 sensitive** split above is our own description of consequence, not a difference
 in the hint: we would rather a tool that unlocks a door never look routine
 because it happens to be reversible.
@@ -90,7 +94,7 @@ before any upstream call.
 |---|---|---|
 | `schedule_software_update` | write | Schedule a software update |
 | `cancel_software_update` | write | Cancel a scheduled update |
-| `report_bug` | write | Send feedback to mytesla.io (free, no vehicle action) |
+| `report_bug` | write · off-car | Send feedback to mytesla.io (free, no vehicle action) |
 
 ## What is **not** here
 
