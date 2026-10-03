@@ -1,6 +1,6 @@
 # Tool Manifest
 
-The mytesla.io MCP server exposes exactly these **40 fixed tools**. The set does
+The mytesla.io MCP server exposes exactly these **41 fixed tools**. The set does
 not change based on what a client asks for, and there is **no tool that drives
 the car**. Each tool is annotated below with an MCP-standard hint:
 
@@ -32,6 +32,7 @@ before any upstream call.
 | `get_vehicles` | read-only | List vehicles on the account |
 | `get_vehicle_status` | read-only | Live state: battery, range, climate, locks, location |
 | `get_credit_balance` | read-only | Remaining mytesla.io credits |
+| `list_routines` | read-only | Ready-made routines and their step-by-step instructions (free, no vehicle call) |
 
 ## Climate
 

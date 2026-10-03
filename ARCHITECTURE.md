@@ -28,9 +28,11 @@ They never travel back to the AI client.
 
 | Party | Sees your prompt? | Sees Tesla tokens? | Can command the car? |
 |---|---|---|---|
-| **Your AI client** (Claude/ChatGPT/Cursor) | Yes — it's your assistant | **No** | Only by calling one of the 40 tools |
+| **Your AI client** (Claude/ChatGPT/Cursor) | Yes, it's your assistant | **No** | Only by calling one of the 41 tools |
 | **mytesla.io server** | No — only the resulting tool calls | Yes — held server-side, encrypted | Yes, within your approved Tesla scope |
 | **Tesla** | No | Issues them | Executes signed commands |
+| **Google Analytics** (usage analytics) | No | No | No |
+| **Stripe** (billing and usage metering) | No | No | No |
 
 Key points:
 
@@ -43,12 +45,25 @@ Key points:
 - **Commands** are signed requests through Tesla's official Fleet API and
   Vehicle Command Protocol — the same secured path Tesla's own app uses. No
   scraped session tokens, no unofficial API.
+- **Usage analytics**: the server sends Google Analytics an event for each
+  request to the connector (keyed to a code computed from the connecting IP
+  address and user agent with a secret key), an event for each tool call (tool
+  name, outcome, a short error label, latency, credits, AI client, and, when
+  available, the approximate location of the connecting computer; keyed to an
+  internal account ID), and a few account events (connecting, sign-up, new
+  subscription, bug report filed). Events never include your prompt, your Tesla
+  tokens, car names or VINs, or the data your commands return, such as location
+  or battery level. They are used only to keep the service reliable, improve it,
+  understand how it is used, and see which channels bring new users and
+  paid subscriptions, and are never sold or resold.
+- **Billing**: Stripe receives billing events and, for each successful tool
+  call by a customer with a Stripe record, a usage meter event naming the tool.
 
 ## Failure & abuse containment
 
 - The MCP session is OAuth-gated and bound to a single user; a client can only
   ever act on that user's own vehicles.
-- The exposed tool set is fixed at 40. A prompt cannot cause the server to
+- The exposed tool set is fixed at 41. A prompt cannot cause the server to
   expose new capabilities or exceed the Tesla-approved scope.
 - PIN-protected actions (Valet, speed limit) require the user's PIN, which the
   server does not hold on the AI's behalf.

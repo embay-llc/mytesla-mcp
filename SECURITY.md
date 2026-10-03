@@ -39,6 +39,10 @@ OAuth-based.
   beyond serving the live request.
 - **We do not sell** your data, and **we do not train** AI models on your
   conversations or vehicle data.
+- Our servers send **usage analytics** about connector requests and tool calls
+  to Google Analytics, never including your prompts, Tesla tokens, car names or
+  VINs, or the data your commands return, such as location or battery level. It
+  is never sold or resold.
 - Your **prompts are processed by your own AI client**, not by us. mytesla.io
   receives the resulting tool invocations, not your raw conversation.
 - See [`PRIVACY.md`](./PRIVACY.md) and <https://mytesla.io/privacy>.
@@ -51,7 +55,7 @@ OAuth-based.
   before any upstream Fleet API call.
 - **Injection-safe data access:** parameterized queries only.
 - **Secrets** live in the platform secret store, never in source control.
-- **Scope of action:** 40 fixed tools, no driving capability, PIN-protected
+- **Scope of action:** 41 fixed tools, no driving capability, PIN-protected
   functions gated by the user's own PIN.
 
 ## Revocation — you're always in control

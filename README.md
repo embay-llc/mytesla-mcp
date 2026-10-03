@@ -22,7 +22,7 @@ does not store. Nothing here contains secrets or credentials.
 | **Endpoint** | `https://mcp.mytesla.io/mcp` |
 | **Transport** | Streamable HTTP |
 | **Authorization** | OAuth 2.1 (dynamic client registration, RFC 7591) |
-| **Tools** | 40 fixed tools (see [`TOOLS.md`](./TOOLS.md)) — no "drive" tool |
+| **Tools** | 41 fixed tools (see [`TOOLS.md`](./TOOLS.md)), no "drive" tool |
 | **Upstream** | Tesla Fleet API + Vehicle Command Protocol (official, signed) |
 | **Operator** | Embay, LLC |
 | **Security contact** | security@mytesla.io |
@@ -42,7 +42,7 @@ password.
 
 ## What's in this repo
 
-- [`TOOLS.md`](./TOOLS.md) — the full 40-tool manifest with read-only vs.
+- [`TOOLS.md`](./TOOLS.md): the full 41-tool manifest with read-only vs.
   state-changing annotations.
 - [`SECURITY.md`](./SECURITY.md) — authorization, token handling, encryption,
   data isolation, revocation, and how to report a vulnerability.
@@ -54,7 +54,7 @@ password.
 
 - **Your AI client never receives Tesla OAuth tokens.** Tokens are held
   server-side, encrypted at rest; the MCP client only sends tool calls.
-- **The Tesla-approved OAuth scope is the hard ceiling.** The server exposes 40
+- **The Tesla-approved OAuth scope is the hard ceiling.** The server exposes 41
   fixed tools and can't request anything beyond what you approved on Tesla's
   screen.
 - **No "drive" tool.** The server controls climate, charging, access, and a few
