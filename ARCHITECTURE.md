@@ -56,8 +56,9 @@ Key points:
   or battery level. They are used only to keep the service reliable, improve it,
   understand how it is used, and see which channels bring new users and
   paid subscriptions, and are never sold or resold.
-- **Billing**: Stripe receives billing events and, for each successful tool
-  call by a customer with a Stripe record, a usage meter event naming the tool.
+- **Billing**: Stripe receives billing events. For each successful tool call
+  by a customer with a Stripe record, a usage meter event naming the tool may
+  also be sent to Stripe.
 
 ## Failure & abuse containment
 
